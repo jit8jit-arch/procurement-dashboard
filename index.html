@@ -23,13 +23,12 @@
       <div class="logo" aria-hidden="true">📋</div>
       <div>
         <div class="title">Procurement Projects</div>
-        <div class="subtitle">Projects → Sections → Items (Local + Exportable)</div>
+        <div class="subtitle">Projects → Sections → Items (Procurement Log Template)</div>
       </div>
     </div>
 
     <div class="top-actions" role="group" aria-label="Top actions">
       <button class="btn ghost mobileOnly" id="btnToggleSidebar" type="button">📁 Projects</button>
-      <button class="btn" id="btnEnableNoti" type="button">🔔 Notifications</button>
       <button class="btn" id="btnBackup" type="button" title="Download full backup (JSON)">⬇️ Backup</button>
       <label class="btn ghost fileBtn" title="Restore backup JSON">
         ⬆️ Restore
@@ -55,8 +54,7 @@
       <div id="projectList" class="list" role="list"></div>
 
       <div class="sidebar-foot">
-        <div class="hint">Saved locally in your browser. Use Backup/Restore for portability.</div>
-        <div class="hint">Exports respect filters + current view.</div>
+        <div class="hint">Saved locally in your browser. Use Backup/Restore to move data.</div>
       </div>
     </aside>
 
@@ -82,7 +80,6 @@
               <span class="pill soft" id="pContractor">Main Contractor: —</span>
               <span class="pill soft" id="pLocation">Location: —</span>
             </div>
-
             <div class="saveLine">
               <span id="saveState" class="saveState">Saved</span>
               <span class="muted" id="lastUpdated"></span>
@@ -95,12 +92,12 @@
           </div>
         </div>
 
-        <!-- Quick stats -->
+        <!-- Stats -->
         <div class="statsBar" role="region" aria-label="Summary">
-          <div class="stat"><div class="statNum" id="stTotal">0</div><div class="statLbl">Total</div></div>
+          <div class="stat"><div class="statNum" id="stTotal">0</div><div class="statLbl">Total Items</div></div>
           <div class="stat"><div class="statNum" id="stApproved">0</div><div class="statLbl">Approved</div></div>
           <div class="stat"><div class="statNum" id="stPending">0</div><div class="statLbl">Pending</div></div>
-          <div class="stat"><div class="statNum" id="stOverdue">0</div><div class="statLbl">Overdue</div></div>
+          <div class="stat"><div class="statNum" id="stOverdue">0</div><div class="statLbl">Overdue (Planned)</div></div>
         </div>
 
         <!-- Sections -->
@@ -110,13 +107,15 @@
             <div id="sectionChips" class="chips" role="list"></div>
           </div>
 
-          <div class="sectionRight" role="group" aria-label="Section actions">
+          <div class="sectionRight" role="group" aria-label="Actions">
             <button class="btn" id="btnAddSection" type="button">➕ Add Section</button>
             <div class="dividerV" aria-hidden="true"></div>
+
             <label class="btn ghost fileBtn" title="Import items from Excel">
               ⬆️ Import Excel
               <input id="excelImport" type="file" accept=".xlsx,.xls" hidden />
             </label>
+
             <button class="btn" id="btnExportExcel" type="button">⬇️ Excel</button>
             <button class="btn" id="btnExportCSV" type="button">⬇️ CSV</button>
             <button class="btn" id="btnExportPDF" type="button">🧾 PDF</button>
@@ -136,12 +135,12 @@
           <div class="filtersGrid">
             <div class="field">
               <label for="itemSearch">Search</label>
-              <input id="itemSearch" class="input" placeholder="Search description, supplier, PR, LPO…" />
+              <input id="itemSearch" class="input" placeholder="Search description, supplier, PR, LPO, remarks…" />
             </div>
 
             <div class="field">
-              <label for="statusFilter">Approval Status</label>
-              <select id="statusFilter" class="select">
+              <label for="approvalFilter">Approval Status</label>
+              <select id="approvalFilter" class="select">
                 <option value="">All</option>
                 <option>APPROVED</option>
                 <option>PENDING</option>
@@ -155,12 +154,25 @@
               <select id="prStatusFilter" class="select">
                 <option value="">All</option>
                 <option>Pending with Store Keeper</option>
-                <option>Pending with QS</option>
+                <option>Pending with the QS</option>
                 <option>Pending</option>
                 <option>Approved</option>
                 <option>Rejected</option>
                 <option>On Hold</option>
                 <option>Resubmitted</option>
+                <option>Cancelled</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="paymentFilter">Payment Status</label>
+              <select id="paymentFilter" class="select">
+                <option value="">All</option>
+                <option>Not Started</option>
+                <option>Pending</option>
+                <option>Partially Paid</option>
+                <option>Paid</option>
+                <option>On Hold</option>
                 <option>Cancelled</option>
               </select>
             </div>
@@ -207,9 +219,6 @@
           </div>
         </div>
 
-        <!-- Notifications panel -->
-        <div id="notiPanel" class="noti hidden" role="status" aria-live="polite"></div>
-
         <!-- Table -->
         <div class="tableWrap" role="region" aria-label="Items table">
           <div class="tableMeta">
@@ -242,7 +251,7 @@
     </section>
   </main>
 
-  <!-- Modal (fixed: default hidden, open with .show) -->
+  <!-- Modal (fixed: hidden by default; open with .show) -->
   <div id="modalBackdrop" class="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal" role="document">
       <div class="modalHead">

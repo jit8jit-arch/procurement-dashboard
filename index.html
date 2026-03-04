@@ -28,6 +28,7 @@
     </div>
 
     <div class="top-actions" role="group" aria-label="Top actions">
+      <button class="btn ghost mobileOnly" id="btnToggleSidebar" type="button">📁 Projects</button>
       <button class="btn" id="btnEnableNoti" type="button">🔔 Notifications</button>
       <button class="btn" id="btnBackup" type="button" title="Download full backup (JSON)">⬇️ Backup</button>
       <label class="btn ghost fileBtn" title="Restore backup JSON">
@@ -39,8 +40,8 @@
   </header>
 
   <main id="main" class="layout" role="main">
-    <!-- Left sidebar -->
-    <aside class="sidebar" aria-label="Projects">
+    <!-- Sidebar (drawer on mobile) -->
+    <aside class="sidebar" id="sidebar" aria-label="Projects">
       <div class="sidebar-head">
         <div class="h">Projects</div>
         <input id="projectSearch" class="input" placeholder="Search by name / ref…" aria-label="Search projects" />
@@ -81,6 +82,7 @@
               <span class="pill soft" id="pContractor">Main Contractor: —</span>
               <span class="pill soft" id="pLocation">Location: —</span>
             </div>
+
             <div class="saveLine">
               <span id="saveState" class="saveState">Saved</span>
               <span class="muted" id="lastUpdated"></span>
@@ -88,9 +90,17 @@
           </div>
 
           <div class="projectButtons" role="group" aria-label="Project actions">
-            <button class="btn" id="btnEditProject" type="button">✏️ Edit</button>
+            <button class="btn" id="btnEditProject" type="button">✏️ Edit Project</button>
             <button class="btn danger" id="btnDeleteProject" type="button">🗑️ Delete</button>
           </div>
+        </div>
+
+        <!-- Quick stats -->
+        <div class="statsBar" role="region" aria-label="Summary">
+          <div class="stat"><div class="statNum" id="stTotal">0</div><div class="statLbl">Total</div></div>
+          <div class="stat"><div class="statNum" id="stApproved">0</div><div class="statLbl">Approved</div></div>
+          <div class="stat"><div class="statNum" id="stPending">0</div><div class="statLbl">Pending</div></div>
+          <div class="stat"><div class="statNum" id="stOverdue">0</div><div class="statLbl">Overdue</div></div>
         </div>
 
         <!-- Sections -->
@@ -107,8 +117,9 @@
               ⬆️ Import Excel
               <input id="excelImport" type="file" accept=".xlsx,.xls" hidden />
             </label>
-            <button class="btn" id="btnExportExcel" type="button">⬇️ Export Excel</button>
-            <button class="btn" id="btnExportPDF" type="button">🧾 Export PDF</button>
+            <button class="btn" id="btnExportExcel" type="button">⬇️ Excel</button>
+            <button class="btn" id="btnExportCSV" type="button">⬇️ CSV</button>
+            <button class="btn" id="btnExportPDF" type="button">🧾 PDF</button>
           </div>
         </div>
 
@@ -136,6 +147,21 @@
                 <option>PENDING</option>
                 <option>REJECTED</option>
                 <option>RESUBMIT</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="prStatusFilter">PR Status</label>
+              <select id="prStatusFilter" class="select">
+                <option value="">All</option>
+                <option>Pending with Store Keeper</option>
+                <option>Pending with QS</option>
+                <option>Pending</option>
+                <option>Approved</option>
+                <option>Rejected</option>
+                <option>On Hold</option>
+                <option>Resubmitted</option>
+                <option>Cancelled</option>
               </select>
             </div>
 
@@ -187,7 +213,8 @@
         <!-- Table -->
         <div class="tableWrap" role="region" aria-label="Items table">
           <div class="tableMeta">
-            <div id="resultCount" class="muted">0 items</div>
+            <div id="resultCount" class="muted">0 item(s)</div>
+
             <div class="pager">
               <button class="btn small" id="btnPrevPage" type="button">◀</button>
               <span class="muted" id="pageInfo">Page 1</span>
@@ -202,18 +229,20 @@
             </div>
           </div>
 
-          <table class="table" id="itemsTable">
-            <thead>
-              <tr id="tableHeadRow"></tr>
-            </thead>
-            <tbody id="itemsBody"></tbody>
-          </table>
+          <div class="tableScroll">
+            <table class="table" id="itemsTable">
+              <thead>
+                <tr id="tableHeadRow"></tr>
+              </thead>
+              <tbody id="itemsBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Modal (fixed - uses .show class, not hidden) -->
+  <!-- Modal (fixed: default hidden, open with .show) -->
   <div id="modalBackdrop" class="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal" role="document">
       <div class="modalHead">

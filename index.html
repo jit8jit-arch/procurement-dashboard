@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
   <title>Procurement Projects Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
 
@@ -15,130 +16,182 @@
 </head>
 
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">📋</div>
+  <a class="skipLink" href="#main">Skip to content</a>
+
+  <header class="topbar" role="banner">
+    <div class="brand" aria-label="App">
+      <div class="logo" aria-hidden="true">📋</div>
       <div>
         <div class="title">Procurement Projects</div>
-        <div class="subtitle">Standard template (Projects → Sections → Items)</div>
+        <div class="subtitle">Projects → Sections → Items (Local + Exportable)</div>
       </div>
     </div>
 
-    <div class="top-actions">
-      <button class="btn" id="btnEnableNoti">🔔 Enable Notifications</button>
-      <button class="btn primary" id="btnAddProject">➕ New Project</button>
+    <div class="top-actions" role="group" aria-label="Top actions">
+      <button class="btn" id="btnEnableNoti" type="button">🔔 Notifications</button>
+      <button class="btn" id="btnBackup" type="button" title="Download a full backup (JSON)">⬇️ Backup</button>
+      <label class="btn ghost fileBtn" title="Restore from backup JSON">
+        ⬆️ Restore
+        <input id="backupImport" type="file" accept=".json" hidden />
+      </label>
+      <button class="btn primary" id="btnAddProject" type="button">➕ New Project</button>
     </div>
   </header>
 
-  <main class="layout">
+  <main id="main" class="layout" role="main">
     <!-- Left: Projects -->
-    <aside class="sidebar">
+    <aside class="sidebar" aria-label="Projects">
       <div class="sidebar-head">
         <div class="h">Projects</div>
-        <input id="projectSearch" class="input" placeholder="Search project..." />
+        <input id="projectSearch" class="input" placeholder="Search project by name / ref…" aria-label="Search projects" />
       </div>
-      <div id="projectList" class="list"></div>
+
+      <div class="sidebar-actions" role="group" aria-label="Project list actions">
+        <button class="btn small" id="btnSortProjects" type="button" aria-label="Sort projects">↕️ Sort</button>
+        <button class="btn small" id="btnClearAll" type="button" aria-label="Clear all saved data">🧹 Clear</button>
+      </div>
+
+      <div id="projectList" class="list" role="list"></div>
 
       <div class="sidebar-foot">
-        <div class="hint">Tip: Projects are saved in your browser (LocalStorage).</div>
-        <div class="hint">You can export/import Excel per project.</div>
+        <div class="hint">Saved locally in your browser. Use Backup/Restore for portability.</div>
+        <div class="hint">Exports respect filters + current view.</div>
       </div>
     </aside>
 
     <!-- Right: Project workspace -->
-    <section class="workspace">
-      <div id="emptyState" class="empty">
+    <section class="workspace" aria-label="Workspace">
+      <div id="emptyState" class="empty" role="status" aria-live="polite">
         <div class="emptyCard">
           <div class="emptyTitle">No project selected</div>
           <div class="emptyText">Create a project or select one from the left.</div>
-          <button class="btn primary" id="btnAddProject2">➕ Create First Project</button>
+          <button class="btn primary" id="btnAddProject2" type="button">➕ Create Project</button>
         </div>
       </div>
 
       <div id="projectView" class="hidden">
         <!-- Project header -->
-        <div class="projectHeader">
+        <div class="projectHeader" role="region" aria-label="Project details">
           <div class="projectMeta">
             <div class="projectName" id="pName">—</div>
-            <div class="projectLine">
+            <div class="projectLine" aria-label="Project metadata">
               <span class="pill" id="pRef">Ref: —</span>
               <span class="pill soft" id="pClient">Client: —</span>
               <span class="pill soft" id="pConsultant">Consultant: —</span>
               <span class="pill soft" id="pContractor">Main Contractor: —</span>
+              <span class="pill soft" id="pLocation">Location: —</span>
             </div>
           </div>
 
-          <div class="projectButtons">
-            <button class="btn" id="btnEditProject">✏️ Edit</button>
-            <button class="btn danger" id="btnDeleteProject">🗑️ Delete</button>
+          <div class="projectButtons" role="group" aria-label="Project actions">
+            <button class="btn" id="btnEditProject" type="button">✏️ Edit</button>
+            <button class="btn danger" id="btnDeleteProject" type="button">🗑️ Delete</button>
           </div>
         </div>
 
         <!-- Sections -->
-        <div class="sectionBar">
+        <div class="sectionBar" role="region" aria-label="Sections">
           <div class="sectionLeft">
             <div class="h2">Sections / Categories</div>
-            <div id="sectionChips" class="chips"></div>
+            <div id="sectionChips" class="chips" role="list" aria-label="Section chips"></div>
           </div>
-          <div class="sectionRight">
-            <button class="btn" id="btnAddSection">➕ Add Section</button>
-            <div class="dividerV"></div>
-            <label class="btn ghost fileBtn">
+
+          <div class="sectionRight" role="group" aria-label="Section actions">
+            <button class="btn" id="btnAddSection" type="button">➕ Add Section</button>
+            <div class="dividerV" aria-hidden="true"></div>
+
+            <label class="btn ghost fileBtn" title="Import items from Excel">
               ⬆️ Import Excel
               <input id="excelImport" type="file" accept=".xlsx,.xls" hidden />
             </label>
-            <button class="btn" id="btnExportExcel">⬇️ Export Excel</button>
-            <button class="btn" id="btnExportPDF">🧾 Export PDF</button>
+
+            <button class="btn" id="btnExportExcel" type="button">⬇️ Export Excel</button>
+            <button class="btn" id="btnExportPDF" type="button">🧾 Export PDF</button>
           </div>
         </div>
 
-        <!-- Filters -->
-        <div class="filters">
-          <input id="itemSearch" class="input grow" placeholder="Search items (description, PR, LPO, supplier...)" />
-          <select id="statusFilter" class="select">
-            <option value="">Approval: All</option>
-            <option>APPROVED</option>
-            <option>PENDING</option>
-            <option>REJECTED</option>
-            <option>RESUBMIT</option>
-          </select>
-          <select id="sortBy" class="select">
-            <option value="desc_asc">Sort: Description (A→Z)</option>
-            <option value="desc_desc">Sort: Description (Z→A)</option>
-            <option value="planned_asc">Sort: Planned Date (Earliest)</option>
-            <option value="planned_desc">Sort: Planned Date (Latest)</option>
-            <option value="prdate_desc">Sort: PR Date (Latest)</option>
-            <option value="prdate_asc">Sort: PR Date (Earliest)</option>
-          </select>
-          <button class="btn primary" id="btnAddItem">➕ Add Item</button>
+        <!-- Advanced Filters -->
+        <div class="filtersPanel" role="region" aria-label="Filters">
+          <div class="filtersTop">
+            <div class="filtersTitle">Filters</div>
+            <div class="filtersRight">
+              <button class="btn small" id="btnResetFilters" type="button">Reset</button>
+              <button class="btn small" id="btnColumns" type="button">🧩 Columns</button>
+            </div>
+          </div>
+
+          <div class="filtersGrid">
+            <div class="field">
+              <label for="itemSearch">Search</label>
+              <input id="itemSearch" class="input" placeholder="Search description, supplier, PR, LPO…" />
+            </div>
+
+            <div class="field">
+              <label for="statusFilter">Approval Status</label>
+              <select id="statusFilter" class="select">
+                <option value="">All</option>
+                <option>APPROVED</option>
+                <option>PENDING</option>
+                <option>REJECTED</option>
+                <option>RESUBMIT</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="sectionMulti">Sections (multi)</label>
+              <select id="sectionMulti" class="select" multiple size="4" aria-label="Filter by sections"></select>
+              <div class="smallHint">Ctrl/⌘ to multi-select.</div>
+            </div>
+
+            <div class="field">
+              <label for="plannedFrom">Planned Date From</label>
+              <input id="plannedFrom" class="input" type="date" />
+            </div>
+
+            <div class="field">
+              <label for="plannedTo">Planned Date To</label>
+              <input id="plannedTo" class="input" type="date" />
+            </div>
+
+            <div class="field">
+              <label for="onlyOverdue">
+                <input id="onlyOverdue" type="checkbox" />
+                Only overdue (not approved)
+              </label>
+            </div>
+
+            <div class="field">
+              <label for="sortBy">Sort</label>
+              <select id="sortBy" class="select">
+                <option value="desc_asc">Description (A→Z)</option>
+                <option value="desc_desc">Description (Z→A)</option>
+                <option value="planned_asc">Planned Date (Earliest)</option>
+                <option value="planned_desc">Planned Date (Latest)</option>
+                <option value="prdate_desc">PR Date (Latest)</option>
+                <option value="prdate_asc">PR Date (Earliest)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>&nbsp;</label>
+              <button class="btn primary" id="btnAddItem" type="button">➕ Add Item</button>
+            </div>
+          </div>
         </div>
 
         <!-- Notifications panel -->
-        <div id="notiPanel" class="noti hidden"></div>
+        <div id="notiPanel" class="noti hidden" role="status" aria-live="polite"></div>
 
         <!-- Table -->
-        <div class="tableWrap">
+        <div class="tableWrap" role="region" aria-label="Items table">
+          <div class="tableMeta">
+            <div id="resultCount" class="muted">0 items</div>
+            <div class="muted">Tip: Double-click a row to edit.</div>
+          </div>
+
           <table class="table" id="itemsTable">
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Submittal Ref</th>
-                <th>Rev</th>
-                <th>Description of Material</th>
-                <th>Manufacturer / Supplier</th>
-                <th>Approval Status</th>
-                <th>Planned Submission Date</th>
-                <th>Est Qty</th>
-                <th>Ordered Qty</th>
-                <th>PR Number</th>
-                <th>PR Date</th>
-                <th>PR Status</th>
-                <th>LPO Issue Date</th>
-                <th>LPO Number</th>
-                <th>Payment Status</th>
-                <th>Section</th>
-                <th></th>
-              </tr>
+              <tr id="tableHeadRow"></tr>
             </thead>
             <tbody id="itemsBody"></tbody>
           </table>
@@ -148,20 +201,20 @@
   </main>
 
   <!-- Modal -->
-  <div id="modalBackdrop" class="modalBackdrop hidden">
+  <div id="modalBackdrop" class="modalBackdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal">
       <div class="modalHead">
         <div class="modalTitle" id="modalTitle">—</div>
-        <button class="iconBtn" id="modalClose">✕</button>
+        <button class="iconBtn" id="modalClose" type="button" aria-label="Close">✕</button>
       </div>
       <div id="modalBody" class="modalBody"></div>
       <div class="modalFoot" id="modalFoot"></div>
     </div>
   </div>
 
-  <div id="toastWrap" class="toastWrap"></div>
+  <div id="toastWrap" class="toastWrap" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Suggestion lists for descriptions and sections -->
+  <!-- Suggestions -->
   <datalist id="descSuggestions"></datalist>
   <datalist id="sectionSuggestions"></datalist>
 

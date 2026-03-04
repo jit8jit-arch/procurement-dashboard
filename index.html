@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Procurement Projects Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- XLSX export/import -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- PDF export -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">📋</div>
+      <div>
+        <div class="title">Procurement Projects</div>
+        <div class="subtitle">Standard template (Projects → Sections → Items)</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn" id="btnEnableNoti">🔔 Enable Notifications</button>
+      <button class="btn primary" id="btnAddProject">➕ New Project</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left: Projects -->
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="h">Projects</div>
+        <input id="projectSearch" class="input" placeholder="Search project..." />
+      </div>
+      <div id="projectList" class="list"></div>
+
+      <div class="sidebar-foot">
+        <div class="hint">Tip: Projects are saved in your browser (LocalStorage).</div>
+        <div class="hint">You can also export/import Excel per project.</div>
+      </div>
+    </aside>
+
+    <!-- Right: Project workspace -->
+    <section class="workspace">
+      <div id="emptyState" class="empty">
+        <div class="emptyCard">
+          <div class="emptyTitle">No project selected</div>
+          <div class="emptyText">Create a project or select one from the left.</div>
+          <button class="btn primary" id="btnAddProject2">➕ Create First Project</button>
+        </div>
+      </div>
+
+      <div id="projectView" class="hidden">
+        <!-- Project header -->
+        <div class="projectHeader">
+          <div class="projectMeta">
+            <div class="projectName" id="pName">—</div>
+            <div class="projectLine">
+              <span class="pill" id="pRef">Ref: —</span>
+              <span class="pill soft" id="pClient">Client: —</span>
+              <span class="pill soft" id="pConsultant">Consultant: —</span>
+              <span class="pill soft" id="pContractor">Main Contractor: —</span>
+            </div>
+          </div>
+
+          <div class="projectButtons">
+            <button class="btn" id="btnEditProject">✏️ Edit</button>
+            <button class="btn danger" id="btnDeleteProject">🗑️ Delete</button>
+          </div>
+        </div>
+
+        <!-- Sections -->
+        <div class="sectionBar">
+          <div class="sectionLeft">
+            <div class="h2">Sections / Categories</div>
+            <div id="sectionChips" class="chips"></div>
+          </div>
+          <div class="sectionRight">
+            <button class="btn" id="btnAddSection">➕ Add Section</button>
+            <div class="dividerV"></div>
+            <label class="btn ghost fileBtn">
+              ⬆️ Import Excel
+              <input id="excelImport" type="file" accept=".xlsx,.xls" hidden />
+            </label>
+            <button class="btn" id="btnExportExcel">⬇️ Export Excel</button>
+            <button class="btn" id="btnExportPDF">🧾 Export PDF</button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+          <input id="itemSearch" class="input grow" placeholder="Search items (description, PR, LPO, supplier...)" />
+          <select id="statusFilter" class="select">
+            <option value="">Approval: All</option>
+            <option>APPROVED</option>
+            <option>PENDING</option>
+            <option>REJECTED</option>
+            <option>RESUBMIT</option>
+          </select>
+          <select id="sortBy" class="select">
+            <option value="desc_asc">Sort: Description (A→Z)</option>
+            <option value="desc_desc">Sort: Description (Z→A)</option>
+            <option value="planned_asc">Sort: Planned Date (Earliest)</option>
+            <option value="planned_desc">Sort: Planned Date (Latest)</option>
+            <option value="prdate_desc">Sort: PR Date (Latest)</option>
+            <option value="prdate_asc">Sort: PR Date (Earliest)</option>
+          </select>
+          <button class="btn primary" id="btnAddItem">➕ Add Item</button>
+        </div>
+
+        <!-- Notifications panel -->
+        <div id="notiPanel" class="noti hidden"></div>
+
+        <!-- Table -->
+        <div class="tableWrap">
+          <table class="table" id="itemsTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Submittal Ref</th>
+                <th>Rev</th>
+                <th>Description of Material</th>
+                <th>Manufacturer / Supplier</th>
+                <th>Approval Status</th>
+                <th>Planned Submission Date</th>
+                <th>Est Qty</th>
+                <th>Ordered Qty</th>
+                <th>PR Number</th>
+                <th>PR Date</th>
+                <th>PR Status</th>
+                <th>LPO Issue Date</th>
+                <th>LPO Number</th>
+                <th>Payment Status</th>
+                <th>Section</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal -->
+  <div id="modalBackdrop" class="modalBackdrop hidden">
+    <div class="modal">
+      <div class="modalHead">
+        <div class="modalTitle" id="modalTitle">—</div>
+        <button class="iconBtn" id="modalClose">✕</button>
+      </div>
+      <div id="modalBody" class="modalBody"></div>
+      <div class="modalFoot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <div id="toastWrap" class="toastWrap"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

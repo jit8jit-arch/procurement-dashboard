@@ -7,7 +7,7 @@
   <title>Procurement Projects Dashboard</title>
   <link rel="stylesheet" href="styles.css" />
 
-  <!-- XLSX export/import -->
+  <!-- XLSX import/export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <!-- PDF export -->
@@ -19,7 +19,7 @@
   <a class="skipLink" href="#main">Skip to content</a>
 
   <header class="topbar" role="banner">
-    <div class="brand" aria-label="App">
+    <div class="brand">
       <div class="logo" aria-hidden="true">📋</div>
       <div>
         <div class="title">Procurement Projects</div>
@@ -29,8 +29,8 @@
 
     <div class="top-actions" role="group" aria-label="Top actions">
       <button class="btn" id="btnEnableNoti" type="button">🔔 Notifications</button>
-      <button class="btn" id="btnBackup" type="button" title="Download a full backup (JSON)">⬇️ Backup</button>
-      <label class="btn ghost fileBtn" title="Restore from backup JSON">
+      <button class="btn" id="btnBackup" type="button" title="Download full backup (JSON)">⬇️ Backup</button>
+      <label class="btn ghost fileBtn" title="Restore backup JSON">
         ⬆️ Restore
         <input id="backupImport" type="file" accept=".json" hidden />
       </label>
@@ -39,16 +39,16 @@
   </header>
 
   <main id="main" class="layout" role="main">
-    <!-- Left: Projects -->
+    <!-- Left sidebar -->
     <aside class="sidebar" aria-label="Projects">
       <div class="sidebar-head">
         <div class="h">Projects</div>
-        <input id="projectSearch" class="input" placeholder="Search project by name / ref…" aria-label="Search projects" />
+        <input id="projectSearch" class="input" placeholder="Search by name / ref…" aria-label="Search projects" />
       </div>
 
       <div class="sidebar-actions" role="group" aria-label="Project list actions">
-        <button class="btn small" id="btnSortProjects" type="button" aria-label="Sort projects">↕️ Sort</button>
-        <button class="btn small" id="btnClearAll" type="button" aria-label="Clear all saved data">🧹 Clear</button>
+        <button class="btn small" id="btnSortProjects" type="button">↕️ Sort</button>
+        <button class="btn small" id="btnClearAll" type="button">🧹 Clear</button>
       </div>
 
       <div id="projectList" class="list" role="list"></div>
@@ -59,7 +59,7 @@
       </div>
     </aside>
 
-    <!-- Right: Project workspace -->
+    <!-- Workspace -->
     <section class="workspace" aria-label="Workspace">
       <div id="emptyState" class="empty" role="status" aria-live="polite">
         <div class="emptyCard">
@@ -74,12 +74,16 @@
         <div class="projectHeader" role="region" aria-label="Project details">
           <div class="projectMeta">
             <div class="projectName" id="pName">—</div>
-            <div class="projectLine" aria-label="Project metadata">
+            <div class="projectLine">
               <span class="pill" id="pRef">Ref: —</span>
               <span class="pill soft" id="pClient">Client: —</span>
               <span class="pill soft" id="pConsultant">Consultant: —</span>
               <span class="pill soft" id="pContractor">Main Contractor: —</span>
               <span class="pill soft" id="pLocation">Location: —</span>
+            </div>
+            <div class="saveLine">
+              <span id="saveState" class="saveState">Saved</span>
+              <span class="muted" id="lastUpdated"></span>
             </div>
           </div>
 
@@ -93,24 +97,22 @@
         <div class="sectionBar" role="region" aria-label="Sections">
           <div class="sectionLeft">
             <div class="h2">Sections / Categories</div>
-            <div id="sectionChips" class="chips" role="list" aria-label="Section chips"></div>
+            <div id="sectionChips" class="chips" role="list"></div>
           </div>
 
           <div class="sectionRight" role="group" aria-label="Section actions">
             <button class="btn" id="btnAddSection" type="button">➕ Add Section</button>
             <div class="dividerV" aria-hidden="true"></div>
-
             <label class="btn ghost fileBtn" title="Import items from Excel">
               ⬆️ Import Excel
               <input id="excelImport" type="file" accept=".xlsx,.xls" hidden />
             </label>
-
             <button class="btn" id="btnExportExcel" type="button">⬇️ Export Excel</button>
             <button class="btn" id="btnExportPDF" type="button">🧾 Export PDF</button>
           </div>
         </div>
 
-        <!-- Advanced Filters -->
+        <!-- Filters -->
         <div class="filtersPanel" role="region" aria-label="Filters">
           <div class="filtersTop">
             <div class="filtersTitle">Filters</div>
@@ -139,7 +141,7 @@
 
             <div class="field">
               <label for="sectionMulti">Sections (multi)</label>
-              <select id="sectionMulti" class="select" multiple size="4" aria-label="Filter by sections"></select>
+              <select id="sectionMulti" class="select" multiple size="4"></select>
               <div class="smallHint">Ctrl/⌘ to multi-select.</div>
             </div>
 
@@ -154,7 +156,7 @@
             </div>
 
             <div class="field">
-              <label for="onlyOverdue">
+              <label class="checkboxLine">
                 <input id="onlyOverdue" type="checkbox" />
                 Only overdue (not approved)
               </label>
@@ -186,7 +188,18 @@
         <div class="tableWrap" role="region" aria-label="Items table">
           <div class="tableMeta">
             <div id="resultCount" class="muted">0 items</div>
-            <div class="muted">Tip: Double-click a row to edit.</div>
+            <div class="pager">
+              <button class="btn small" id="btnPrevPage" type="button">◀</button>
+              <span class="muted" id="pageInfo">Page 1</span>
+              <button class="btn small" id="btnNextPage" type="button">▶</button>
+
+              <select id="pageSize" class="select smallSelect" title="Rows per page">
+                <option value="10">10 rows</option>
+                <option value="25" selected>25 rows</option>
+                <option value="50">50 rows</option>
+                <option value="100">100 rows</option>
+              </select>
+            </div>
           </div>
 
           <table class="table" id="itemsTable">
@@ -200,9 +213,9 @@
     </section>
   </main>
 
-  <!-- Modal -->
-  <div id="modalBackdrop" class="modalBackdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal">
+  <!-- Modal (fixed - uses .show class, not hidden) -->
+  <div id="modalBackdrop" class="modalBackdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal" role="document">
       <div class="modalHead">
         <div class="modalTitle" id="modalTitle">—</div>
         <button class="iconBtn" id="modalClose" type="button" aria-label="Close">✕</button>

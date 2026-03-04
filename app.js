@@ -1,23 +1,29 @@
-/* International-standard improvements:
-   - Accessible UI (aria, keyboard-friendly modal, skip link support)
-   - Better filtering:
-       * Search, approval, multi-section, date range, overdue toggle
-   - Column chooser
-   - Project details saved (more fields + metadata)
-   - Backup/Restore JSON for portability
-   - Exports respect current filtered view (Excel + PDF)
-   - Double-click row to edit
+/* Professional Procurement Dashboard (v3)
+   FIXES:
+   - Modal uses .show class (no stuck popup)
+   - ESC closes, click outside closes
+   - Focus trap in modal
+   - Body scroll lock while modal open
+
+   FEATURES:
+   - Projects + per-project saved settings (columns)
+   - Sections with auto colors
+   - Advanced filters (search, status, multi-section, date range, overdue)
+   - Pagination
+   - Export Excel + PDF (exports filtered view)
+   - Import Excel
+   - Backup/Restore JSON
+   - Row edit/delete + confirm delete + double-click row to edit
+   - No sample project details
 */
 
-const LS_KEY = "proc_dash_v2";
+const LS_KEY = "proc_dash_v3";
 
-// Auto colors for sections
 const COLOR_PALETTE = [
   "#22c55e","#3b82f6","#f59e0b","#ef4444","#a855f7","#14b8a6",
   "#e11d48","#84cc16","#06b6d4","#f97316","#8b5cf6","#10b981"
 ];
 
-// Suggested terms (general, no project-specific samples)
 const GENERAL_DESC_TERMS = [
   "Pipes & Fittings",
   "Valves",
@@ -63,15 +69,20 @@ const $ = (id) => document.getElementById(id);
 
 let state = loadState();
 let activeProjectId = state.activeProjectId || null;
-let activeSectionChip = "All"; // chip selection
-let projectSortMode = state.projectSortMode || "recent"; // recent | name
+let activeSectionChip = "All";
+let projectSortMode = state.projectSortMode || "recent";
+
+let currentPage = 1;
+let pageSize = 25;
+
+let lastFocusedBeforeModal = null;
 
 init();
 
 function init(){
   populateSuggestions();
   bindUI();
-  closeModal();
+  closeModal(true);
   render();
 }
 
@@ -85,63 +96,74 @@ function bindUI(){
   $("btnAddProject2").onclick = () => openProjectModal();
 
   $("projectSearch").oninput = renderProjectList;
-  $("btnSortProjects").onclick = () => {
-    projectSortMode = (projectSortMode === "recent") ? "name" : "recent";
-    state.projectSortMode = projectSortMode;
-    saveState();
-    renderProjectList();
-    toast("Sort", projectSortMode === "recent" ? "Sorted by recent." : "Sorted by name.");
-  };
-
-  $("btnClearAll").onclick = () => confirmClearAll();
+  $("btnSortProjects").onclick = toggleProjectSort;
+  $("btnClearAll").onclick = confirmClearAll;
 
   $("btnEditProject").onclick = () => {
     const p = getActiveProject();
     if (p) openProjectModal(p);
   };
+  $("btnDeleteProject").onclick = deleteActiveProject;
 
-  $("btnDeleteProject").onclick = () => deleteActiveProject();
-  $("btnAddSection").onclick = () => openSectionModal();
+  $("btnAddSection").onclick = openSectionModal;
   $("btnAddItem").onclick = () => openItemModal();
 
-  // Filters
-  $("itemSearch").oninput = () => renderItems();
-  $("statusFilter").onchange = () => renderItems();
-  $("sectionMulti").onchange = () => renderItems();
-  $("plannedFrom").onchange = () => renderItems();
-  $("plannedTo").onchange = () => renderItems();
-  $("onlyOverdue").onchange = () => renderItems();
-  $("sortBy").onchange = () => renderItems();
+  $("itemSearch").oninput = () => { currentPage = 1; renderItems(); };
+  $("statusFilter").onchange = () => { currentPage = 1; renderItems(); };
+  $("sectionMulti").onchange = () => { currentPage = 1; renderItems(); };
+  $("plannedFrom").onchange = () => { currentPage = 1; renderItems(); };
+  $("plannedTo").onchange = () => { currentPage = 1; renderItems(); };
+  $("onlyOverdue").onchange = () => { currentPage = 1; renderItems(); };
+  $("sortBy").onchange = () => { currentPage = 1; renderItems(); };
 
-  $("btnResetFilters").onclick = () => resetFilters();
-  $("btnColumns").onclick = () => openColumnsModal();
+  $("btnResetFilters").onclick = resetFilters;
+  $("btnColumns").onclick = openColumnsModal;
 
   $("btnExportExcel").onclick = exportExcel;
   $("btnExportPDF").onclick = exportPDF;
 
   $("excelImport").addEventListener("change", handleExcelImport);
 
-  // Backup / restore
   $("btnBackup").onclick = backupJSON;
   $("backupImport").addEventListener("change", restoreJSON);
 
-  // Notifications
   $("btnEnableNoti").onclick = enableNotifications;
 
+  // Pagination
+  $("btnPrevPage").onclick = () => { if (currentPage > 1){ currentPage--; renderItems(); } };
+  $("btnNextPage").onclick = () => { currentPage++; renderItems(); };
+  $("pageSize").onchange = () => {
+    pageSize = parseInt($("pageSize").value, 10) || 25;
+    currentPage = 1;
+    renderItems();
+  };
+
   // Modal close
-  $("modalClose").onclick = closeModal;
-  $("modalBackdrop").onclick = (e) => { if (e.target === $("modalBackdrop")) closeModal(); };
+  $("modalClose").onclick = () => closeModal();
+  $("modalBackdrop").onclick = (e) => {
+    if (e.target === $("modalBackdrop")) closeModal();
+  };
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !$("modalBackdrop").classList.contains("hidden")) closeModal();
+    if (e.key === "Escape" && isModalOpen()) closeModal();
+    if (e.key === "Tab" && isModalOpen()) trapFocus(e);
   });
 }
 
-/* -------------------- Render -------------------- */
+/* ---------------- Render ---------------- */
 
 function render(){
   renderProjectList();
   renderProjectView();
   renderNotifications();
+}
+
+function toggleProjectSort(){
+  projectSortMode = (projectSortMode === "recent") ? "name" : "recent";
+  state.projectSortMode = projectSortMode;
+  saveState();
+  renderProjectList();
+  toast("Sort", projectSortMode === "recent" ? "Sorted by recent." : "Sorted by name.");
 }
 
 function renderProjectList(){
@@ -189,6 +211,7 @@ function selectProject(id){
   activeProjectId = id;
   state.activeProjectId = id;
   activeSectionChip = "All";
+  currentPage = 1;
   saveState();
   render();
 }
@@ -201,6 +224,8 @@ function renderProjectView(){
   $("projectView").classList.toggle("hidden", !hasActive);
   if (!hasActive) return;
 
+  ensureProjectDefaults(p);
+
   $("pName").textContent = p.name || "—";
   $("pRef").textContent = `Ref: ${p.refNo || "—"}`;
   $("pClient").textContent = `Client: ${p.client || "—"}`;
@@ -208,10 +233,18 @@ function renderProjectView(){
   $("pContractor").textContent = `Main Contractor: ${p.contractor || "—"}`;
   $("pLocation").textContent = `Location: ${p.location || "—"}`;
 
+  $("lastUpdated").textContent = p.updatedAt ? `Last updated: ${formatLocal(p.updatedAt)}` : "";
+
   renderSections();
   renderSectionMultiFilter();
   renderTableHeader();
   renderItems();
+}
+
+function ensureProjectDefaults(p){
+  if (!p.sections) p.sections = [{ name:"All", color:"#94a3b8", locked:true }];
+  if (!p.items) p.items = [];
+  if (!p.columns) p.columns = structuredClone(DEFAULT_COLUMNS);
 }
 
 function renderSections(){
@@ -225,7 +258,7 @@ function renderSections(){
     chip.className = "chip" + (s.name === activeSectionChip ? " active" : "");
     chip.onclick = () => {
       activeSectionChip = s.name;
-      // set multi-select to that single section for ease
+      currentPage = 1;
       setSectionMultiSelection(s.name === "All" ? [] : [s.name]);
       renderItems();
       renderNotifications();
@@ -256,17 +289,12 @@ function renderSectionMultiFilter(){
   const sections = normalizeSections(p).filter(s => s.name !== "All").map(s => s.name);
 
   const existing = getSelectedMulti(sel);
-
   sel.innerHTML = sections.map(s => `<option value="${escAttr(s)}">${esc(s)}</option>`).join("");
-
-  // keep selection if possible
   setSectionMultiSelection(existing.filter(x => sections.includes(x)));
 }
 
 function renderTableHeader(){
   const p = getActiveProject();
-  if (!p.columns) p.columns = structuredClone(DEFAULT_COLUMNS);
-
   const headRow = $("tableHeadRow");
   headRow.innerHTML = "";
 
@@ -282,8 +310,21 @@ function renderItems(){
   const p = getActiveProject();
   if (!p) return;
 
-  const items = getFilteredItemsForView(p);
-  $("resultCount").textContent = `${items.length} item(s)`;
+  const all = getFilteredItemsForView(p);
+
+  // Pagination calculation
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage - 1) * pageSize;
+  const pageItems = all.slice(start, start + pageSize);
+
+  $("resultCount").textContent = `${total} item(s)`;
+  $("pageInfo").textContent = `Page ${currentPage} of ${totalPages}`;
+
+  $("btnPrevPage").disabled = currentPage <= 1;
+  $("btnNextPage").disabled = currentPage >= totalPages;
 
   const sections = normalizeSections(p);
   const secColor = new Map(sections.map(s => [s.name, s.color]));
@@ -291,9 +332,9 @@ function renderItems(){
   const body = $("itemsBody");
   body.innerHTML = "";
 
-  const cols = (p.columns || DEFAULT_COLUMNS).filter(c => c.show);
+  const cols = p.columns.filter(c => c.show);
 
-  items.forEach((it, idx) => {
+  pageItems.forEach((it, idx) => {
     const tr = document.createElement("tr");
     tr.ondblclick = () => openItemModal(it);
 
@@ -315,7 +356,7 @@ function renderItems(){
         const sname = it.section || "All";
         const color = secColor.get(sname) || "#94a3b8";
         td.innerHTML = `
-          <span class="badge" title="Section">
+          <span class="badge">
             <span class="dot" style="background:${color}"></span>
             ${esc(sname)}
           </span>
@@ -324,7 +365,7 @@ function renderItems(){
         td.className = "wrap";
         td.textContent = it.desc || "";
       } else if (col.key === "sno"){
-        td.textContent = it.sno ?? (idx + 1);
+        td.textContent = it.sno ?? (start + idx + 1);
       } else {
         td.textContent = (it[col.key] ?? "");
       }
@@ -335,7 +376,6 @@ function renderItems(){
     body.appendChild(tr);
   });
 
-  // row action buttons
   body.querySelectorAll("button[data-edit]").forEach(btn => {
     btn.onclick = () => {
       const id = btn.getAttribute("data-edit");
@@ -345,13 +385,13 @@ function renderItems(){
   });
 
   body.querySelectorAll("button[data-del]").forEach(btn => {
-    btn.onclick = () => deleteItem(btn.getAttribute("data-del"));
+    btn.onclick = () => confirmDeleteItem(btn.getAttribute("data-del"));
   });
 
   renderNotifications();
 }
 
-/* -------------------- Filtering -------------------- */
+/* ---------------- Filtering ---------------- */
 
 function getFilteredItemsForView(p){
   const q = ($("itemSearch").value || "").trim().toLowerCase();
@@ -364,20 +404,16 @@ function getFilteredItemsForView(p){
 
   let items = (p.items || []).slice();
 
-  // chip selection as a quick filter helper (does not override multi-select; it complements)
   if (activeSectionChip && activeSectionChip !== "All"){
-    // if multi is empty, follow chip; if multi has selection, keep multi as the primary
     if (sectionsSelected.length === 0){
       items = items.filter(it => (it.section || "All") === activeSectionChip);
     }
   }
 
-  // multi section filter
   if (sectionsSelected.length){
     items = items.filter(it => sectionsSelected.includes((it.section || "All")));
   }
 
-  // text search
   if (q){
     items = items.filter(it => {
       const hay = [
@@ -388,12 +424,10 @@ function getFilteredItemsForView(p){
     });
   }
 
-  // status filter
   if (status){
     items = items.filter(it => (it.approval || "").toUpperCase() === status);
   }
 
-  // planned date range filter
   if (from){
     items = items.filter(it => (it.planned || "") >= from);
   }
@@ -401,12 +435,10 @@ function getFilteredItemsForView(p){
     items = items.filter(it => (it.planned || "") <= to);
   }
 
-  // overdue filter (only when not approved)
   if (onlyOverdue){
     items = items.filter(it => isOverdue(it.planned, it.approval));
   }
 
-  // sorting
   items.sort((a,b) => sortCompare(a,b,sortMode));
   return items;
 }
@@ -419,70 +451,74 @@ function resetFilters(){
   $("onlyOverdue").checked = false;
   setSectionMultiSelection([]);
   activeSectionChip = "All";
+  currentPage = 1;
   renderSections();
   renderItems();
   toast("Filters", "Filters reset.");
 }
 
-/* -------------------- Columns -------------------- */
+/* ---------------- Modals (Fixed) ---------------- */
 
-function openColumnsModal(){
-  const p = getActiveProject();
-  if (!p) return;
-  if (!p.columns) p.columns = structuredClone(DEFAULT_COLUMNS);
-
-  openModal("Choose Columns");
-  const rows = p.columns
-    .filter(c => c.key !== "actions")
-    .map(c => `
-      <label style="display:flex;align-items:center;gap:10px;padding:6px 0">
-        <input type="checkbox" data-col="${escAttr(c.key)}" ${c.show ? "checked" : ""} />
-        <span>${esc(c.label)}</span>
-      </label>
-    `).join("");
-
-  $("modalBody").innerHTML = `
-    <div class="muted" style="margin-bottom:10px">Choose which columns to display (saved per project).</div>
-    <div>${rows}</div>
-  `;
-  $("modalFoot").innerHTML = `
-    <button class="btn" id="m_cancel">Cancel</button>
-    <button class="btn primary" id="m_save">Save</button>
-  `;
-
-  $("m_cancel").onclick = closeModal;
-  $("m_save").onclick = () => {
-    const checks = $("modalBody").querySelectorAll("input[type=checkbox][data-col]");
-    const wanted = new Map();
-    checks.forEach(ch => wanted.set(ch.getAttribute("data-col"), ch.checked));
-
-    p.columns = p.columns.map(c => {
-      if (wanted.has(c.key)) return { ...c, show: wanted.get(c.key) };
-      return c;
-    });
-
-    saveState();
-    closeModal();
-    renderTableHeader();
-    renderItems();
-    toast("Saved", "Columns updated.");
-  };
+function isModalOpen(){
+  return $("modalBackdrop").classList.contains("show");
 }
 
-/* -------------------- Project Modals -------------------- */
+function openModal(title){
+  lastFocusedBeforeModal = document.activeElement;
+
+  $("modalTitle").textContent = title;
+  $("modalBackdrop").classList.add("show");
+  document.body.classList.add("modalOpen");
+
+  // focus first focusable element after render
+  setTimeout(() => {
+    const focusable = getModalFocusable();
+    if (focusable.length) focusable[0].focus();
+  }, 0);
+}
+
+function closeModal(force=false){
+  $("modalBackdrop").classList.remove("show");
+  document.body.classList.remove("modalOpen");
+
+  $("modalBody").innerHTML = "";
+  $("modalFoot").innerHTML = "";
+
+  if (!force && lastFocusedBeforeModal && typeof lastFocusedBeforeModal.focus === "function"){
+    lastFocusedBeforeModal.focus();
+  }
+  lastFocusedBeforeModal = null;
+}
+
+function getModalFocusable(){
+  const modal = $("modalBackdrop");
+  return Array.from(modal.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )).filter(el => !el.disabled && el.offsetParent !== null);
+}
+
+function trapFocus(e){
+  const focusable = getModalFocusable();
+  if (!focusable.length) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first){
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last){
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+/* ---------------- Project Modals ---------------- */
 
 function openProjectModal(existing=null){
   openModal(existing ? "Edit Project" : "New Project");
 
-  const p = existing || {
-    name:"",
-    refNo:"",
-    client:"",
-    consultant:"",
-    contractor:"",
-    location:"",
-    notes:""
-  };
+  const p = existing || { name:"", refNo:"", client:"", consultant:"", contractor:"", location:"", notes:"" };
 
   $("modalBody").innerHTML = `
     <div class="grid">
@@ -528,13 +564,14 @@ function openProjectModal(existing=null){
     <button class="btn primary" id="m_save">${existing ? "Save Changes" : "Create Project"}</button>
   `;
 
-  $("m_cancel").onclick = closeModal;
+  $("m_cancel").onclick = () => closeModal();
   $("m_save").onclick = () => {
     const name = $("m_pName").value.trim();
     const refNo = $("m_pRef").value.trim();
-
     if (!name) return toast("Missing", "Project Name is required.");
     if (!refNo) return toast("Missing", "Project Reference No. is required.");
+
+    setSaving(true);
 
     if (existing){
       existing.name = name;
@@ -565,10 +602,12 @@ function openProjectModal(existing=null){
       activeProjectId = np.id;
       state.activeProjectId = activeProjectId;
       activeSectionChip = "All";
+      currentPage = 1;
     }
 
     saveState();
     closeModal();
+    setSaving(false);
     render();
     toast("Saved", "Project saved.");
   };
@@ -594,14 +633,17 @@ function deleteActiveProject(){
     <button class="btn" id="m_cancel">Cancel</button>
     <button class="btn danger" id="m_del">Delete</button>
   `;
-  $("m_cancel").onclick = closeModal;
+  $("m_cancel").onclick = () => closeModal();
   $("m_del").onclick = () => {
+    setSaving(true);
     state.projects = state.projects.filter(x => x.id !== p.id);
     activeProjectId = state.projects[0]?.id || null;
     state.activeProjectId = activeProjectId;
     activeSectionChip = "All";
+    currentPage = 1;
     saveState();
     closeModal();
+    setSaving(false);
     render();
     toast("Deleted", "Project removed.");
   };
@@ -619,19 +661,20 @@ function confirmClearAll(){
     <button class="btn" id="m_cancel">Cancel</button>
     <button class="btn danger" id="m_clear">Clear</button>
   `;
-  $("m_cancel").onclick = closeModal;
+  $("m_cancel").onclick = () => closeModal();
   $("m_clear").onclick = () => {
     localStorage.removeItem(LS_KEY);
-    state = { projects: [], activeProjectId:null, projectSortMode:"recent" };
+    state = { projects:[], activeProjectId:null, projectSortMode:"recent" };
     activeProjectId = null;
     activeSectionChip = "All";
+    currentPage = 1;
     closeModal();
     render();
     toast("Cleared", "All local data removed.");
   };
 }
 
-/* -------------------- Sections -------------------- */
+/* ---------------- Sections ---------------- */
 
 function openSectionModal(){
   const p = getActiveProject();
@@ -642,18 +685,16 @@ function openSectionModal(){
     <div class="grid">
       <div class="field full">
         <label>Section Name</label>
-        <input id="m_sName" list="sectionSuggestions" placeholder="e.g., Mechanical, Electrical, Procurement..." />
+        <input id="m_sName" list="sectionSuggestions" placeholder="Type or pick from suggestions…" />
       </div>
     </div>
     <div class="muted" style="margin-top:10px;font-size:12px">Color will be assigned automatically.</div>
   `;
-
   $("modalFoot").innerHTML = `
     <button class="btn" id="m_cancel">Cancel</button>
     <button class="btn primary" id="m_add">Add Section</button>
   `;
-
-  $("m_cancel").onclick = closeModal;
+  $("m_cancel").onclick = () => closeModal();
   $("m_add").onclick = () => {
     const name = $("m_sName").value.trim();
     if (!name) return toast("Missing", "Section name is required.");
@@ -663,14 +704,17 @@ function openSectionModal(){
       return toast("Duplicate", "This section already exists.");
     }
 
+    setSaving(true);
     p.sections = sections.filter(s => s.name !== "All");
     p.sections.push({ name, color: colorFor(name), locked:false });
     p.updatedAt = nowISO();
-
     saveState();
+    setSaving(false);
+
     closeModal();
     activeSectionChip = name;
     setSectionMultiSelection([name]);
+    currentPage = 1;
     render();
     toast("Added", `Section "${name}" created.`);
   };
@@ -684,17 +728,18 @@ function removeSection(sectionName){
   const s = sections.find(x => x.name === sectionName);
   if (!s || s.locked) return;
 
+  setSaving(true);
   (p.items || []).forEach(it => {
     if ((it.section||"") === sectionName) it.section = "All";
   });
-
   p.sections = sections.filter(x => x.name !== "All" && x.name !== sectionName);
   p.updatedAt = nowISO();
+  saveState();
+  setSaving(false);
 
   if (activeSectionChip === sectionName) activeSectionChip = "All";
   setSectionMultiSelection([]);
-
-  saveState();
+  currentPage = 1;
   render();
   toast("Updated", `Section "${sectionName}" removed (items moved to All).`);
 }
@@ -728,7 +773,7 @@ function ensureSection(p, name){
   p.sections.push({ name, color: colorFor(name), locked:false });
 }
 
-/* -------------------- Items -------------------- */
+/* ---------------- Items ---------------- */
 
 function openItemModal(existing=null){
   const p = getActiveProject();
@@ -763,39 +808,32 @@ function openItemModal(existing=null){
         <label>S. No</label>
         <input id="m_sno" value="${escAttr(it.sno ?? "")}" />
       </div>
-
       <div class="field">
         <label>Material Submittal Ref No.</label>
         <input id="m_ref" value="${escAttr(it.ref ?? "")}" />
       </div>
-
       <div class="field">
         <label>Rev</label>
         <input id="m_rev" value="${escAttr(it.rev ?? "")}" />
       </div>
-
       <div class="field">
         <label>Approval Status</label>
         <select id="m_approval">
           ${["APPROVED","PENDING","REJECTED","RESUBMIT"].map(x => `<option ${String(it.approval||"").toUpperCase()===x?"selected":""}>${x}</option>`).join("")}
         </select>
       </div>
-
       <div class="field full">
         <label>Description of Material</label>
-        <input id="m_desc" list="descSuggestions" value="${escAttr(it.desc ?? "")}" placeholder="e.g., Pipes & Fittings" />
+        <input id="m_desc" list="descSuggestions" value="${escAttr(it.desc ?? "")}" placeholder="Type or pick a term…" />
       </div>
-
       <div class="field full">
         <label>Manufacturer / Supplier</label>
         <input id="m_mfg" value="${escAttr(it.mfg ?? "")}" />
       </div>
-
       <div class="field">
         <label>Planned Date of Submission</label>
         <input id="m_planned" type="date" value="${escAttr(it.planned ?? "")}" />
       </div>
-
       <div class="field">
         <label>Section / Category</label>
         <select id="m_section">
@@ -803,42 +841,34 @@ function openItemModal(existing=null){
           ${normalizeSections(p).filter(s => s.name!=="All").map(s => `<option ${it.section===s.name?"selected":""}>${esc(s.name)}</option>`).join("")}
         </select>
       </div>
-
       <div class="field">
         <label>Est Qty</label>
         <input id="m_est" value="${escAttr(it.estQty ?? "")}" />
       </div>
-
       <div class="field">
         <label>Ordered Qty</label>
         <input id="m_ord" value="${escAttr(it.ordQty ?? "")}" />
       </div>
-
       <div class="field">
         <label>PR Number</label>
         <input id="m_prno" value="${escAttr(it.prNo ?? "")}" />
       </div>
-
       <div class="field">
         <label>PR Date</label>
         <input id="m_prdate" type="date" value="${escAttr(it.prDate ?? "")}" />
       </div>
-
       <div class="field full">
         <label>PR Status</label>
         <input id="m_prstatus" value="${escAttr(it.prStatus ?? "")}" />
       </div>
-
       <div class="field">
         <label>LPO Issue Date</label>
         <input id="m_lpodate" type="date" value="${escAttr(it.lpoDate ?? "")}" />
       </div>
-
       <div class="field">
         <label>LPO Number</label>
         <input id="m_lpono" value="${escAttr(it.lpoNo ?? "")}" />
       </div>
-
       <div class="field full">
         <label>Payment Status</label>
         <input id="m_payment" value="${escAttr(it.payment ?? "")}" />
@@ -851,10 +881,12 @@ function openItemModal(existing=null){
     <button class="btn primary" id="m_save">${isEdit ? "Save Changes" : "Add Item"}</button>
   `;
 
-  $("m_cancel").onclick = closeModal;
+  $("m_cancel").onclick = () => closeModal();
   $("m_save").onclick = () => {
     const desc = $("m_desc").value.trim();
     if (!desc) return toast("Missing", "Description is required.");
+
+    setSaving(true);
 
     it.sno = $("m_sno").value.trim();
     it.ref = $("m_ref").value.trim();
@@ -878,19 +910,50 @@ function openItemModal(existing=null){
     if (isEdit){
       const idx = p.items.findIndex(x => x.id === it.id);
       if (idx >= 0) p.items[idx] = it;
-      toast("Saved", "Item updated.");
     } else {
       p.items.push(it);
-      toast("Added", "Item created.");
     }
 
     p.updatedAt = nowISO();
     saveState();
+    setSaving(false);
+
     closeModal();
     renderSectionMultiFilter();
     renderSections();
     renderTableHeader();
     renderItems();
+    toast("Saved", isEdit ? "Item updated." : "Item added.");
+  };
+}
+
+function confirmDeleteItem(itemId){
+  const p = getActiveProject();
+  if (!p) return;
+  const it = p.items.find(x => x.id === itemId);
+  if (!it) return;
+
+  openModal("Delete Item?");
+  $("modalBody").innerHTML = `
+    <div style="line-height:1.5">
+      Are you sure you want to delete this item?
+      <div class="muted" style="margin-top:8px"><b>${esc(it.desc || "Item")}</b></div>
+    </div>
+  `;
+  $("modalFoot").innerHTML = `
+    <button class="btn" id="m_cancel">Cancel</button>
+    <button class="btn danger" id="m_del">Delete</button>
+  `;
+  $("m_cancel").onclick = () => closeModal();
+  $("m_del").onclick = () => {
+    setSaving(true);
+    p.items = p.items.filter(x => x.id !== itemId);
+    p.updatedAt = nowISO();
+    saveState();
+    setSaving(false);
+    closeModal();
+    renderItems();
+    toast("Deleted", "Item removed.");
   };
 }
 
@@ -901,18 +964,51 @@ function pickDefaultSection(p){
   return "All";
 }
 
-function deleteItem(itemId){
+/* ---------------- Columns ---------------- */
+
+function openColumnsModal(){
   const p = getActiveProject();
   if (!p) return;
 
-  p.items = (p.items || []).filter(x => x.id !== itemId);
-  p.updatedAt = nowISO();
-  saveState();
-  renderItems();
-  toast("Deleted", "Item removed.");
+  openModal("Choose Columns");
+  const rows = p.columns
+    .filter(c => c.key !== "actions")
+    .map(c => `
+      <label style="display:flex;align-items:center;gap:10px;padding:6px 0">
+        <input type="checkbox" data-col="${escAttr(c.key)}" ${c.show ? "checked" : ""} />
+        <span>${esc(c.label)}</span>
+      </label>
+    `).join("");
+
+  $("modalBody").innerHTML = `
+    <div class="muted" style="margin-bottom:10px">Columns are saved per project.</div>
+    <div>${rows}</div>
+  `;
+  $("modalFoot").innerHTML = `
+    <button class="btn" id="m_cancel">Cancel</button>
+    <button class="btn primary" id="m_save">Save</button>
+  `;
+
+  $("m_cancel").onclick = () => closeModal();
+  $("m_save").onclick = () => {
+    const checks = $("modalBody").querySelectorAll("input[type=checkbox][data-col]");
+    const wanted = new Map();
+    checks.forEach(ch => wanted.set(ch.getAttribute("data-col"), ch.checked));
+
+    setSaving(true);
+    p.columns = p.columns.map(c => wanted.has(c.key) ? { ...c, show: wanted.get(c.key) } : c);
+    p.updatedAt = nowISO();
+    saveState();
+    setSaving(false);
+
+    closeModal();
+    renderTableHeader();
+    renderItems();
+    toast("Saved", "Columns updated.");
+  };
 }
 
-/* -------------------- Notifications -------------------- */
+/* ---------------- Notifications ---------------- */
 
 async function enableNotifications(){
   if (!("Notification" in window)) {
@@ -953,7 +1049,7 @@ function renderNotifications(){
   if ("Notification" in window && Notification.permission === "granted"){
     upcoming.forEach(u => {
       if (u.daysLeft <= 1 && (u.item.approval || "").toUpperCase() !== "APPROVED"){
-        maybeNotifyOnce(`due_${u.item.id}`, `${p.name}: Due soon`, `${u.item.desc} planned on ${u.item.planned}`);
+        maybeNotifyOnce(`due_${u.item.id}`, `Due soon`, `${u.item.desc} planned on ${u.item.planned}`);
       }
     });
   }
@@ -977,7 +1073,7 @@ function maybeNotifyOnce(key, title, body){
   new Notification(title, { body });
 }
 
-/* -------------------- Import/Export -------------------- */
+/* ---------------- Import / Export ---------------- */
 
 async function handleExcelImport(e){
   const file = e.target.files?.[0];
@@ -994,8 +1090,9 @@ async function handleExcelImport(e){
     const headerRowIndex = rows.findIndex(r =>
       r.some(cell => String(cell||"").toUpperCase().includes("DESCRIPTION OF MATERIAL"))
     );
+
     if (headerRowIndex < 0){
-      toast("Import failed", "Couldn’t find the procurement header row (needs 'Description of Material').");
+      toast("Import failed", "Couldn’t find header row containing 'Description of Material'.");
       return;
     }
 
@@ -1036,11 +1133,14 @@ async function handleExcelImport(e){
       return;
     }
 
+    setSaving(true);
     imported.forEach(it => ensureSection(p, it.section));
     p.items = (p.items || []).concat(imported);
     p.updatedAt = nowISO();
-
     saveState();
+    setSaving(false);
+
+    currentPage = 1;
     renderSectionMultiFilter();
     renderSections();
     renderTableHeader();
@@ -1057,24 +1157,20 @@ function exportExcel(){
   if (!p) return;
 
   const items = getFilteredItemsForView(p);
-  const cols = (p.columns || DEFAULT_COLUMNS).filter(c => c.show && c.key !== "actions");
+  const cols = p.columns.filter(c => c.show && c.key !== "actions");
 
   const header = cols.map(c => c.label);
   const aoa = [header];
 
   items.forEach((it, idx) => {
-    aoa.push(cols.map(c => {
-      if (c.key === "sno") return it.sno ?? (idx + 1);
-      return it[c.key] ?? "";
-    }));
+    aoa.push(cols.map(c => (c.key === "sno") ? (it.sno || (idx + 1)) : (it[c.key] ?? "")));
   });
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Export");
 
-  const filename = safeFileName(`${p.name}_${p.refNo}_export.xlsx`);
-  XLSX.writeFile(wb, filename);
+  XLSX.writeFile(wb, safeFileName(`${p.name}_${p.refNo}_export.xlsx`));
   toast("Export", "Excel downloaded.");
 }
 
@@ -1083,7 +1179,7 @@ function exportPDF(){
   if (!p) return;
 
   const items = getFilteredItemsForView(p);
-  const cols = (p.columns || DEFAULT_COLUMNS).filter(c => c.show && c.key !== "actions");
+  const cols = p.columns.filter(c => c.show && c.key !== "actions");
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:"landscape", unit:"pt", format:"a4" });
@@ -1092,14 +1188,10 @@ function exportPDF(){
   doc.text(`${p.name} — Procurement Log`, 40, 40);
 
   doc.setFontSize(10);
-  const meta = `Ref: ${p.refNo}   Client: ${p.client || "—"}   Consultant: ${p.consultant || "—"}   Generated: ${new Date().toLocaleString()}`;
-  doc.text(meta, 40, 58);
+  doc.text(`Ref: ${p.refNo}   Generated: ${new Date().toLocaleString()}`, 40, 58);
 
   const head = [cols.map(c => c.label)];
-  const body = items.map((it, idx) => cols.map(c => {
-    if (c.key === "sno") return it.sno ?? (idx + 1);
-    return it[c.key] ?? "";
-  }));
+  const body = items.map((it, idx) => cols.map(c => (c.key === "sno") ? (it.sno || (idx + 1)) : (it[c.key] ?? "")));
 
   doc.autoTable({
     head,
@@ -1111,12 +1203,11 @@ function exportPDF(){
     margin: { left: 40, right: 40 }
   });
 
-  const filename = safeFileName(`${p.name}_${p.refNo}_export.pdf`);
-  doc.save(filename);
+  doc.save(safeFileName(`${p.name}_${p.refNo}_export.pdf`));
   toast("Export", "PDF downloaded.");
 }
 
-/* -------------------- Backup / Restore -------------------- */
+/* ---------------- Backup / Restore ---------------- */
 
 function backupJSON(){
   const blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
@@ -1142,7 +1233,6 @@ async function restoreJSON(e){
       return toast("Restore failed", "Invalid backup format.");
     }
 
-    // basic normalization
     restored.projects.forEach(p => {
       if (!p.id) p.id = uid();
       if (!p.sections) p.sections = [{ name:"All", color:"#94a3b8", locked:true }];
@@ -1150,21 +1240,33 @@ async function restoreJSON(e){
       if (!p.columns) p.columns = structuredClone(DEFAULT_COLUMNS);
     });
 
+    setSaving(true);
     state = restored;
     activeProjectId = state.activeProjectId || state.projects[0]?.id || null;
     state.activeProjectId = activeProjectId;
     projectSortMode = state.projectSortMode || "recent";
-
     saveState();
+    setSaving(false);
+
+    currentPage = 1;
     render();
     toast("Restored", "Backup restored successfully.");
   } catch(err){
     console.error(err);
-    toast("Restore failed", "Could not read the backup file.");
+    toast("Restore failed", "Could not read backup file.");
   }
 }
 
-/* -------------------- Utilities -------------------- */
+/* ---------------- Saving indicator ---------------- */
+
+function setSaving(isSaving){
+  const el = $("saveState");
+  if (!el) return;
+  el.textContent = isSaving ? "Saving…" : "Saved";
+  el.classList.toggle("saving", isSaving);
+}
+
+/* ---------------- Utilities ---------------- */
 
 function getActiveProject(){
   return state.projects.find(p => p.id === activeProjectId) || null;
@@ -1187,33 +1289,20 @@ function saveState(){
   localStorage.setItem(LS_KEY, JSON.stringify(state));
 }
 
-function openModal(title){
-  $("modalTitle").textContent = title;
-  $("modalBackdrop").classList.remove("hidden");
-}
-
-function closeModal(){
-  $("modalBackdrop").classList.add("hidden");
-  $("modalBody").innerHTML = "";
-  $("modalFoot").innerHTML = "";
-}
-
-function toast(title, text){
-  const wrap = $("toastWrap");
-  const el = document.createElement("div");
-  el.className = "toast";
-  el.innerHTML = `<div class="toastTitle">${esc(title)}</div><div class="toastText">${esc(text)}</div>`;
-  wrap.appendChild(el);
-  setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translateY(6px)"; }, 2600);
-  setTimeout(()=>{ el.remove(); }, 3200);
-}
-
 function uid(){
   return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
 }
 
 function nowISO(){
   return new Date().toISOString();
+}
+
+function formatLocal(iso){
+  try{
+    return new Date(iso).toLocaleString();
+  }catch{
+    return "";
+  }
 }
 
 function colorFor(name){
@@ -1224,8 +1313,7 @@ function colorFor(name){
 }
 
 function safeFileName(s){
-  return (s || "export")
-    .toString()
+  return (s || "export").toString()
     .replace(/[^\w\-]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
@@ -1242,6 +1330,16 @@ function esc(str){
 
 function escAttr(str){
   return esc(str).replaceAll("\n"," ");
+}
+
+function toast(title, text){
+  const wrap = $("toastWrap");
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `<div class="toastTitle">${esc(title)}</div><div class="toastText">${esc(text)}</div>`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translateY(6px)"; }, 2600);
+  setTimeout(()=>{ el.remove(); }, 3200);
 }
 
 function toISODate(v){
@@ -1272,7 +1370,6 @@ function sortCompare(a,b,mode){
     case "planned_desc": return bp.localeCompare(ap);
     case "prdate_asc": return apr.localeCompare(bpr);
     case "prdate_desc": return bpr.localeCompare(apr);
-    case "desc_asc":
     default: return ad.localeCompare(bd);
   }
 }

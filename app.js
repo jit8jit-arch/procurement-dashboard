@@ -24,7 +24,7 @@
    - Import Excel (header detection)
    - Export Excel/CSV/PDF (filtered view)
    - Backup/Restore JSON
-   - Fixed modal (no stuck popup)
+   - Fixed modal (no stuck popup) + mobile UX fixes
 */
 
 const LS_KEY = "proc_dash_general_v1";
@@ -132,29 +132,37 @@ function init(){
 }
 
 function populateSuggestions(){
-  $("descSuggestions").innerHTML = GENERAL_DESC_TERMS.map(t => `<option value="${escAttr(t)}"></option>`).join("");
-  $("sectionSuggestions").innerHTML = GENERAL_SECTION_TERMS.map(t => `<option value="${escAttr(t)}"></option>`).join("");
+  const descDL = $("descSuggestions");
+  const secDL = $("sectionSuggestions");
+  if (descDL) descDL.innerHTML = GENERAL_DESC_TERMS.map(t => `<option value="${escAttr(t)}"></option>`).join("");
+  if (secDL) secDL.innerHTML = GENERAL_SECTION_TERMS.map(t => `<option value="${escAttr(t)}"></option>`).join("");
 }
 
 function bindUI(){
   $("btnAddProject").onclick = () => openProjectModal();
   $("btnAddProject2").onclick = () => openProjectModal();
 
-  $("btnToggleSidebar").onclick = () => $("sidebar").classList.toggle("open");
+  const btnToggleSidebar = $("btnToggleSidebar");
+  if (btnToggleSidebar){
+    btnToggleSidebar.onclick = () => $("sidebar").classList.toggle("open");
+  }
 
   $("projectSearch").oninput = renderProjectList;
+
   $("btnSortProjects").onclick = () => {
     projectSortMode = (projectSortMode === "recent") ? "name" : "recent";
     state.projectSortMode = projectSortMode;
     saveState();
     renderProjectList();
   };
+
   $("btnClearAll").onclick = confirmClearAll;
 
   $("btnEditProject").onclick = () => {
     const p = getActiveProject();
     if (p) openProjectModal(p);
   };
+
   $("btnDeleteProject").onclick = deleteActiveProject;
 
   $("btnAddSection").onclick = openSectionModal;
@@ -252,7 +260,11 @@ function selectProject(id){
   activeSectionChip = "All";
   currentPage = 1;
   saveState();
-  $("sidebar").classList.remove("open");
+
+  // close sidebar on mobile after selection
+  const sb = $("sidebar");
+  if (sb) sb.classList.remove("open");
+
   render();
 }
 
@@ -886,18 +898,24 @@ function openItemModal(existing=null){
     it.supplier = $("m_supplier").value.trim();
     it.approval = $("m_approval").value.trim();
     it.planned = $("m_planned").value;
+
     it.estQty = $("m_est").value.trim();
     it.ordQty = $("m_ord").value.trim();
+
     it.prNo = $("m_prno").value.trim();
     it.prDate = $("m_prdate").value;
     it.prStatus = $("m_prstatus").value;
+
     it.lpoDate = $("m_lpodate").value;
     it.lpoNo = $("m_lpono").value.trim();
+
     it.payment = $("m_payment").value;
+
     it.leadTime = $("m_lead").value.trim();
     it.expectedOnSite = $("m_expected").value;
     it.qtyDelivered = $("m_delivered").value.trim();
     it.qtyPendingDelivery = $("m_pendingdel").value.trim();
+
     it.remarks = $("m_remarks").value.trim();
     it.section = $("m_section").value;
 
@@ -1005,7 +1023,7 @@ function resetFilters(){
   renderItems();
 }
 
-/* ---------- Import Excel (matches your template header rows) ---------- */
+/* ---------- Import Excel (header detection + safe mapping) ---------- */
 async function handleExcelImport(e){
   const file = e.target.files?.[0];
   e.target.value = "";
@@ -1018,7 +1036,6 @@ async function handleExcelImport(e){
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
 
-    // Find header row that contains "DESCRIPTION OF MATERIAL"
     const headerRow = rows.findIndex(r =>
       (r || []).some(cell => String(cell||"").toUpperCase().includes("DESCRIPTION OF MATERIAL"))
     );
@@ -1027,14 +1044,19 @@ async function handleExcelImport(e){
       return;
     }
 
-    // Find subheader row that contains "EST" and "ORDERED" etc (usually headerRow + 2)
-    const subRow = headerRow + 2; // based on your sample layout
     const p = getActiveProject();
     if (!p) return;
 
-    const imported = [];
+    // Best guess start row: after header block (often +3)
+    let startRow = headerRow + 1;
+    for (let i = headerRow + 1; i < Math.min(rows.length, headerRow + 6); i++){
+      const r = rows[i] || [];
+      const joined = r.map(x=>String(x||"").toUpperCase()).join(" ");
+      if (joined.includes("EST") && joined.includes("ORDERED")) startRow = i + 1;
+    }
 
-    for (let i = subRow + 1; i < rows.length; i++){
+    const imported = [];
+    for (let i = startRow; i < rows.length; i++){
       const r = rows[i] || [];
       const desc = String(r[3] || "").trim();
       if (!desc) continue;
@@ -1156,6 +1178,25 @@ function exportPDF(){
   doc.save(safeFileName(`${p.name}_${p.refNo}_export.pdf`));
 }
 
+/* ---------- Clear all ---------- */
+function confirmClearAll(){
+  openModal("Clear All Data?");
+  $("modalBody").innerHTML = `<div style="line-height:1.5">This will delete all projects saved in this browser.</div>`;
+  $("modalFoot").innerHTML = `
+    <button class="btn" id="m_cancel">Cancel</button>
+    <button class="btn danger" id="m_clear">Clear</button>
+  `;
+  $("m_cancel").onclick = () => closeModal();
+  $("m_clear").onclick = () => {
+    localStorage.removeItem(LS_KEY);
+    state = { projects:[], activeProjectId:null, projectSortMode:"recent" };
+    activeProjectId = null;
+    currentPage = 1;
+    closeModal();
+    render();
+  };
+}
+
 /* ---------- Backup / Restore ---------- */
 function backupJSON(){
   const blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
@@ -1195,33 +1236,20 @@ async function restoreJSON(e){
   }
 }
 
-/* ---------- Clear all ---------- */
-function confirmClearAll(){
-  openModal("Clear All Data?");
-  $("modalBody").innerHTML = `<div style="line-height:1.5">This will delete all projects saved in this browser.</div>`;
-  $("modalFoot").innerHTML = `
-    <button class="btn" id="m_cancel">Cancel</button>
-    <button class="btn danger" id="m_clear">Clear</button>
-  `;
-  $("m_cancel").onclick = () => closeModal();
-  $("m_clear").onclick = () => {
-    localStorage.removeItem(LS_KEY);
-    state = { projects:[], activeProjectId:null, projectSortMode:"recent" };
-    activeProjectId = null;
-    currentPage = 1;
-    closeModal();
-    render();
-  };
-}
-
-/* ---------- Modal core (fixed) ---------- */
+/* ---------- Modal core (fixed + mobile drawer close) ---------- */
 function isModalOpen(){ return $("modalBackdrop").classList.contains("show"); }
 
 function openModal(title){
   lastFocusedBeforeModal = document.activeElement;
+
+  // ✅ close sidebar drawer on mobile so it doesn’t cover the modal
+  const sb = $("sidebar");
+  if (sb) sb.classList.remove("open");
+
   $("modalTitle").textContent = title;
   $("modalBackdrop").classList.add("show");
   document.body.classList.add("modalOpen");
+
   setTimeout(() => {
     const f = getModalFocusable();
     if (f.length) f[0].focus();
@@ -1262,8 +1290,6 @@ function setSaving(isSaving){
   el.textContent = isSaving ? "Saving…" : "Saved";
   el.classList.toggle("saving", isSaving);
 }
-
-/* ---------- Pagination helpers already in HTML controls ---------- */
 
 /* ---------- Helpers ---------- */
 function getActiveProject(){ return state.projects.find(p => p.id === activeProjectId) || null; }
